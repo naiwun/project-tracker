@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>專案追蹤儀表板</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f7f6f3;--surface:#ffffff;--surface2:#f0efe9;
+  --border:#e5e3db;--text:#1a1917;--muted:#6b6a63;--hint:#a09e96;
+  --purple:#6e56cf;--purple-bg:#f0ecff;--purple-border:#d4c8ff;
+  --teal:#0f7a6b;--teal-bg:#e6f7f4;--teal-border:#9fe1cb;
+  --amber:#9a5f00;--amber-bg:#fff4e0;--amber-border:#fac775;
+  --green:#3b6d11;--green-bg:#eaf3de;--green-border:#c0dd97;
+  --red:#a32d2d;--red-bg:#fcebeb;--red-border:#f7c1c1;
+  --radius:10px;--radius-sm:6px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;min-height:100vh}
+
+/* Config banner */
+#config-banner{background:#1a1917;color:#f7f6f3;padding:12px 20px;display:flex;align-items:center;gap:12px;font-size:13px}
+#config-banner input{flex:1;background:#2d2c29;border:1px solid #444;border-radius:6px;padding:6px 10px;color:#f7f6f3;font-size:13px;font-family:monospace}
+#config-banner button{background:var(--purple);color:#fff;border:none;border-radius:6px;padding:6px 14px;cursor:pointer;font-size:13px;white-space:nowrap}
+#config-banner .warn{color:#fac775}
+
+/* Layout */
+.app{max-width:1000px;margin:0 auto;padding:24px 20px}
+.top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.top-bar h1{font-size:20px;font-weight:600;letter-spacing:-.02em}
+.top-bar-right{display:flex;gap:8px;align-items:center}
+
+/* Sync status */
+.sync-status{font-size:12px;color:var(--hint);display:flex;align-items:center;gap:5px}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--hint)}
+.sync-dot.ok{background:var(--green)}
+.sync-dot.syncing{background:var(--amber);animation:pulse .8s ease-in-out infinite}
+.sync-dot.error{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* Buttons */
+.btn{background:transparent;border:1px solid var(--border);border-radius:var(--radius-sm);padding:6px 14px;font-size:13px;cursor:pointer;color:var(--text);transition:all .15s}
+.btn:hover{background:var(--surface2)}
+.btn-primary{background:var(--text);color:var(--bg);border-color:transparent}
+.btn-primary:hover{opacity:.85}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-danger{color:var(--red);border-color:var(--red-border)}
+.btn-danger:hover{background:var(--red-bg)}
+
+/* Stats */
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:20px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px}
+.stat-label{font-size:11px;color:var(--hint);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em}
+.stat-val{font-size:24px;font-weight:600;color:var(--text)}
+
+/* Filters */
+.filters{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
+.filter-btn{padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);font-size:12px;cursor:pointer;color:var(--muted);transition:all .15s}
+.filter-btn.active{background:var(--text);color:var(--bg);border-color:transparent}
+
+/* Cards */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.card:hover{border-color:#c0bdb4;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
+.card-title{font-size:14px;font-weight:600;flex:1;margin-right:8px;line-height:1.4}
+.badge{font-size:11px;padding:3px 8px;border-radius:20px;white-space:nowrap;font-weight:500}
+.badge-active{background:var(--teal-bg);color:var(--teal);border:1px solid var(--teal-border)}
+.badge-paused{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border)}
+.badge-done{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.card-desc{font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card-meta{font-size:11.5px;color:var(--hint);display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.progress-row{display:flex;align-items:center;gap:8px}
+.progress-bar{flex:1;height:3px;background:var(--surface2);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--teal);border-radius:2px;transition:width .3s}
+.progress-label{font-size:11px;color:var(--hint);min-width:28px;text-align:right}
+
+/* Empty */
+.empty{text-align:center;padding:48px 0;color:var(--hint)}
+.empty p{margin-top:8px;font-size:13px}
+
+/* Loading overlay */
+#loading{position:fixed;inset:0;background:rgba(247,246,243,.8);display:flex;align-items:center;justify-content:center;z-index:999;font-size:14px;color:var(--muted)}
+#loading.hidden{display:none}
+
+/* Modal */
+.modal-wrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:100;align-items:center;justify-content:center;padding:20px}
+.modal-wrap.open{display:flex}
+.modal{background:var(--surface);border-radius:var(--radius);padding:24px;width:min(520px,100%);max-height:85vh;overflow-y:auto;border:1px solid var(--border)}
+.modal h3{font-size:16px;font-weight:600;margin-bottom:18px}
+.form-row{margin-bottom:14px}
+.form-row label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500}
+.form-row input,.form-row textarea,.form-row select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;color:var(--text);font-family:inherit;transition:border-color .15s}
+.form-row input:focus,.form-row textarea:focus,.form-row select:focus{outline:none;border-color:#b0aaa0}
+.form-row textarea{resize:vertical;min-height:64px}
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modal-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+
+/* Detail panel */
+.detail-wrap{display:none;position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:100;align-items:flex-start;justify-content:flex-end;padding:12px}
+.detail-wrap.open{display:flex}
+.detail{background:var(--surface);border-radius:var(--radius);padding:24px;width:min(480px,100%);height:calc(100vh - 24px);overflow-y:auto;border:1px solid var(--border);display:flex;flex-direction:column;gap:0}
+.detail-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
+.detail-head h3{font-size:16px;font-weight:600;flex:1;margin-right:12px;line-height:1.4}
+.detail-head-actions{display:flex;gap:6px;flex-shrink:0}
+.detail-desc{font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6}
+.detail-progress{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.detail-progress .progress-bar{flex:1}
+.section-head{font-size:11px;font-weight:600;color:var(--hint);text-transform:uppercase;letter-spacing:.07em;margin:18px 0 10px;display:flex;align-items:center;justify-content:space-between}
+
+/* Tasks */
+.todo-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
+.todo-item:last-child{border-bottom:none}
+.todo-item input[type=checkbox]{width:15px;height:15px;cursor:pointer;accent-color:var(--teal);flex-shrink:0}
+.todo-text{flex:1;font-size:13px;color:var(--text)}
+.todo-text.done{text-decoration:line-through;color:var(--hint)}
+.todo-del{background:none;border:none;cursor:pointer;color:var(--hint);font-size:16px;line-height:1;padding:0 2px;opacity:0;transition:opacity .15s}
+.todo-item:hover .todo-del{opacity:1}
+.add-row{display:flex;gap:6px;margin-top:10px}
+.add-row input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:7px 10px;font-size:13px;color:var(--text);font-family:inherit}
+.add-row input:focus{outline:none;border-color:#b0aaa0}
+
+/* Logs */
+.log-item{padding:10px 0;border-bottom:1px solid var(--border)}
+.log-item:last-child{border-bottom:none}
+.log-date{font-size:11px;color:var(--hint);margin-bottom:3px}
+.log-note{font-size:13px;color:var(--text);line-height:1.55;white-space:pre-wrap}
+.log-del{float:right;background:none;border:none;cursor:pointer;color:var(--hint);font-size:14px;opacity:0;transition:opacity .15s;margin-left:8px}
+.log-item:hover .log-del{opacity:1}
+.log-textarea{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;font-size:13px;color:var(--text);font-family:inherit;resize:vertical;min-height:60px;margin-top:8px}
+.log-textarea:focus{outline:none;border-color:#b0aaa0}
+.log-add-row{text-align:right;margin-top:6px}
+
+.no-items{font-size:13px;color:var(--hint);padding:8px 0}
+</style>
+</head>
+<body>
+
+<!-- Config Banner -->
+<div id="config-banner">
+  <span class="warn">⚙</span>
+  <span style="color:#a09e96;white-space:nowrap">Apps Script 網址：</span>
+  <input type="text" id="api-url-input" placeholder="貼上你的 Apps Script 部署網址（https://script.google.com/macros/s/...）">
+  <button onclick="saveApiUrl()">儲存</button>
+</div>
+
+<div id="loading">載入中…</div>
+
+<div class="app">
+  <div class="top-bar">
+    <h1>專案追蹤</h1>
+    <div class="top-bar-right">
+      <div class="sync-status"><div class="sync-dot" id="sync-dot"></div><span id="sync-text">未連線</span></div>
+      <button class="btn btn-sm" onclick="loadAll()">↻ 同步</button>
+      <button class="btn btn-primary" onclick="openNew()">+ 新增專案</button>
+    </div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="filters">
+    <button class="filter-btn active" onclick="setFilter('all',this)">全部</button>
+    <button class="filter-btn" onclick="setFilter('active',this)">進行中</button>
+    <button class="filter-btn" onclick="setFilter('paused',this)">暫停</button>
+    <button class="filter-btn" onclick="setFilter('done',this)">完成</button>
+  </div>
+
+  <div class="cards" id="cards"></div>
+</div>
+
+<!-- Edit Modal -->
+<div class="modal-wrap" id="editModal">
+  <div class="modal">
+    <h3 id="modal-title">新增專案</h3>
+    <div class="form-row"><label>專案名稱</label><input id="f-name" placeholder="輸入專案名稱"></div>
+    <div class="form-row"><label>簡述</label><textarea id="f-desc" placeholder="一句話說明專案目標"></textarea></div>
+    <div class="form-row-2">
+      <div class="form-row" style="margin:0"><label>狀態</label>
+        <select id="f-status">
+          <option value="active">🟢 進行中</option>
+          <option value="paused">🟡 暫停</option>
+          <option value="done">✅ 完成</option>
+        </select>
+      </div>
+      <div class="form-row" style="margin:0"><label>優先度</label>
+        <select id="f-priority">
+          <option value="高">🔴 高</option>
+          <option value="中">🟠 中</option>
+          <option value="低">🔵 低</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row" style="margin:0"><label>分類</label>
+        <select id="f-category">
+          <option value="研究">研究</option>
+          <option value="教學">教學</option>
+          <option value="行政">行政</option>
+          <option value="個人">個人</option>
+          <option value="合作">合作</option>
+        </select>
+      </div>
+      <div class="form-row" style="margin:0"><label>截止日期</label><input id="f-deadline" type="date"></div>
+    </div>
+    <div class="form-row"><label>進度 %（0–100）</label><input id="f-progress" type="number" min="0" max="100" value="0"></div>
+    <div class="modal-footer">
+      <button class="btn btn-danger btn-sm" id="del-btn" onclick="deleteProject()" style="margin-right:auto;display:none">刪除專案</button>
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveProject()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Panel -->
+<div class="detail-wrap" id="detailPanel">
+  <div class="detail">
+    <div class="detail-head">
+      <h3 id="d-name"></h3>
+      <div class="detail-head-actions">
+        <button class="btn btn-sm" onclick="editCurrent()">編輯</button>
+        <button class="btn btn-sm" onclick="closeDetail()">✕</button>
+      </div>
+    </div>
+    <div style="margin-bottom:10px"><span class="badge" id="d-badge"></span></div>
+    <div class="detail-desc" id="d-desc"></div>
+    <div class="detail-progress">
+      <div class="progress-bar"><div class="progress-fill" id="d-prog-fill"></div></div>
+      <span id="d-prog-text" style="font-size:12px;color:var(--hint);min-width:32px"></span>
+    </div>
+
+    <div class="section-head">待辦 / 里程碑</div>
+    <div id="todo-list"></div>
+    <div class="add-row">
+      <input id="new-todo" placeholder="新增待辦，Enter 送出" onkeydown="if(event.key==='Enter')addTodo()">
+      <button class="btn btn-sm" onclick="addTodo()">新增</button>
+    </div>
+
+    <div class="section-head" style="margin-top:24px">會議紀錄 / 決策</div>
+    <div id="log-list"></div>
+    <textarea class="log-textarea" id="new-log" placeholder="記錄今天的會議摘要或重要決策…"></textarea>
+    <div class="log-add-row"><button class="btn btn-sm" onclick="addLog()">新增紀錄</button></div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────
+let API_URL = localStorage.getItem('tracker_api_url') || '';
+let projects = [], tasks = [], logs = [];
+let currentFilter = 'all';
+let editingId = null, viewingId = null;
+
+// ── Init ───────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  if (API_URL) {
+    document.getElementById('api-url-input').value = API_URL;
+    loadAll();
+  } else {
+    setLoading(false);
+    setSyncStatus('error', '請設定 API 網址');
+  }
+});
+
+function saveApiUrl() {
+  const val = document.getElementById('api-url-input').value.trim();
+  if (!val) return alert('請貼上 Apps Script 網址');
+  API_URL = val;
+  localStorage.setItem('tracker_api_url', val);
+  loadAll();
+}
+
+// ── API ────────────────────────────────────────────────
+async function apiFetch(params) {
+  if (!API_URL) { alert('請先設定 Apps Script 網址'); return null; }
+  const url = API_URL + '?' + new URLSearchParams(params);
+  const res = await fetch(url);
+  return res.json();
+}
+
+async function apiPost(action, payload) {
+  if (!API_URL) { alert('請先設定 Apps Script 網址'); return null; }
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action, payload }),
+    headers: { 'Content-Type': 'text/plain' }
+  });
+  return res.json();
+}
+
+async function loadAll() {
+  setLoading(true);
+  setSyncStatus('syncing', '同步中…');
+  try {
+    const data = await apiFetch({ action: 'getAll' });
+    if (data.error) throw new Error(data.error);
+    projects = data.projects || [];
+    tasks = data.tasks || [];
+    logs = data.logs || [];
+    render();
+    setSyncStatus('ok', '已同步');
+  } catch(e) {
+    setSyncStatus('error', '連線失敗');
+    console.error(e);
+  }
+  setLoading(false);
+}
+
+// ── Helpers ────────────────────────────────────────────
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function today() { return new Date().toLocaleDateString('zh-TW',{year:'numeric',month:'2-digit',day:'2-digit'}); }
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function statusLabel(s){ return {active:'進行中',paused:'暫停',done:'完成'}[s]||s; }
+function statusClass(s){ return {active:'badge-active',paused:'badge-paused',done:'badge-done'}[s]||''; }
+function setLoading(v){ document.getElementById('loading').classList.toggle('hidden',!v); }
+function setSyncStatus(state, text){
+  const dot = document.getElementById('sync-dot');
+  dot.className = 'sync-dot ' + state;
+  document.getElementById('sync-text').textContent = text;
+}
+
+// ── Render ─────────────────────────────────────────────
+function render() { renderStats(); renderCards(); }
+
+function renderStats() {
+  const total = projects.length;
+  const active = projects.filter(p=>p.status==='active').length;
+  const paused = projects.filter(p=>p.status==='paused').length;
+  const done   = projects.filter(p=>p.status==='done').length;
+  document.getElementById('stats').innerHTML = `
+    <div class="stat"><div class="stat-label">全部</div><div class="stat-val">${total}</div></div>
+    <div class="stat"><div class="stat-label">進行中</div><div class="stat-val" style="color:var(--teal)">${active}</div></div>
+    <div class="stat"><div class="stat-label">暫停</div><div class="stat-val" style="color:var(--amber)">${paused}</div></div>
+    <div class="stat"><div class="stat-label">完成</div><div class="stat-val" style="color:var(--green)">${done}</div></div>
+  `;
+}
+
+function renderCards() {
+  const list = projects.filter(p => currentFilter==='all' || p.status===currentFilter);
+  const el = document.getElementById('cards');
+  if (!list.length) {
+    el.innerHTML = '<div class="empty"><div style="font-size:32px">📋</div><p>沒有符合的專案，點右上角「+ 新增專案」開始吧</p></div>';
+    return;
+  }
+  el.innerHTML = list.map(p => {
+    const myTasks = tasks.filter(t => String(t.projectId) === String(p.id));
+    const doneCount = myTasks.filter(t => t.done === true || t.done === 'true').length;
+    const prog = Math.min(100, Math.max(0, parseInt(p.progress)||0));
+    const dl = p.deadline ? `📅 ${p.deadline}` : '';
+    const cat = p.category ? `${p.category}` : '';
+    return `<div class="card" onclick="openDetail('${p.id}')">
+      <div class="card-top">
+        <div class="card-title">${esc(p.name)}</div>
+        <span class="badge ${statusClass(p.status)}">${statusLabel(p.status)}</span>
+      </div>
+      <div class="card-desc">${esc(p.desc)||'（無描述）'}</div>
+      <div class="card-meta">
+        ${cat ? `<span>${cat}</span>` : ''}
+        ${dl ? `<span>${dl}</span>` : ''}
+        <span>✅ ${doneCount}/${myTasks.length}</span>
+      </div>
+      <div class="progress-row">
+        <div class="progress-bar"><div class="progress-fill" style="width:${prog}%"></div></div>
+        <span class="progress-label">${prog}%</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCards();
+}
+
+// ── Project CRUD ───────────────────────────────────────
+function openNew() {
+  editingId = null;
+  document.getElementById('modal-title').textContent = '新增專案';
+  ['f-name','f-desc'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-status').value = 'active';
+  document.getElementById('f-priority').value = '中';
+  document.getElementById('f-category').value = '研究';
+  document.getElementById('f-deadline').value = '';
+  document.getElementById('f-progress').value = '0';
+  document.getElementById('del-btn').style.display = 'none';
+  document.getElementById('editModal').classList.add('open');
+}
+
+function editCurrent() {
+  const id = viewingId; closeDetail(); openEditById(id);
+}
+
+function openEditById(id) {
+  const p = projects.find(x=>String(x.id)===String(id)); if(!p) return;
+  editingId = id;
+  document.getElementById('modal-title').textContent = '編輯專案';
+  document.getElementById('f-name').value = p.name;
+  document.getElementById('f-desc').value = p.desc||'';
+  document.getElementById('f-status').value = p.status;
+  document.getElementById('f-priority').value = p.priority||'中';
+  document.getElementById('f-category').value = p.category||'研究';
+  document.getElementById('f-deadline').value = p.deadline||'';
+  document.getElementById('f-progress').value = p.progress||0;
+  document.getElementById('del-btn').style.display = '';
+  document.getElementById('editModal').classList.add('open');
+}
+
+function closeModal() { document.getElementById('editModal').classList.remove('open'); }
+
+async function saveProject() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { alert('請輸入專案名稱'); return; }
+  const p = {
+    id: editingId || uid(),
+    name,
+    desc: document.getElementById('f-desc').value.trim(),
+    status: document.getElementById('f-status').value,
+    priority: document.getElementById('f-priority').value,
+    category: document.getElementById('f-category').value,
+    deadline: document.getElementById('f-deadline').value,
+    progress: parseInt(document.getElementById('f-progress').value)||0,
+  };
+  closeModal();
+  setSyncStatus('syncing','儲存中…');
+  const res = await apiPost('saveProject', p);
+  if (res && res.ok) {
+    const idx = projects.findIndex(x=>String(x.id)===String(p.id));
+    if (idx>=0) projects[idx]=p; else projects.unshift(p);
+    render();
+    setSyncStatus('ok','已同步');
+  } else { setSyncStatus('error','儲存失敗'); }
+}
+
+async function deleteProject() {
+  if (!editingId || !confirm('確定要刪除這個專案及其所有資料嗎？')) return;
+  closeModal();
+  setSyncStatus('syncing','刪除中…');
+  const res = await apiPost('deleteProject', { id: editingId });
+  if (res && res.ok) {
+    projects = projects.filter(p=>String(p.id)!==String(editingId));
+    tasks = tasks.filter(t=>String(t.projectId)!==String(editingId));
+    logs = logs.filter(l=>String(l.projectId)!==String(editingId));
+    render(); setSyncStatus('ok','已同步');
+  } else { setSyncStatus('error','刪除失敗'); }
+}
+
+// ── Detail Panel ───────────────────────────────────────
+function openDetail(id) {
+  viewingId = id; renderDetail();
+  document.getElementById('detailPanel').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+  viewingId = null;
+}
+
+function renderDetail() {
+  const p = projects.find(x=>String(x.id)===String(viewingId)); if(!p) return;
+  document.getElementById('d-name').textContent = p.name;
+  document.getElementById('d-desc').textContent = p.desc||'';
+  const badge = document.getElementById('d-badge');
+  badge.textContent = statusLabel(p.status);
+  badge.className = 'badge ' + statusClass(p.status);
+  const prog = Math.min(100,Math.max(0,parseInt(p.progress)||0));
+  document.getElementById('d-prog-fill').style.width = prog+'%';
+  document.getElementById('d-prog-text').textContent = prog+'%';
+
+  const myTasks = tasks.filter(t=>String(t.projectId)===String(p.id));
+  const tEl = document.getElementById('todo-list');
+  if (!myTasks.length) { tEl.innerHTML = '<div class="no-items">還沒有待辦事項</div>'; }
+  else tEl.innerHTML = myTasks.map(t=>`
+    <div class="todo-item">
+      <input type="checkbox" ${(t.done===true||t.done==='true')?'checked':''} onchange="toggleTask('${t.id}',this.checked)">
+      <span class="todo-text ${(t.done===true||t.done==='true')?'done':''}">${esc(t.text)}</span>
+      <button class="todo-del" onclick="removeTask('${t.id}')">×</button>
+    </div>`).join('');
+
+  const myLogs = logs.filter(l=>String(l.projectId)===String(p.id));
+  const lEl = document.getElementById('log-list');
+  if (!myLogs.length) { lEl.innerHTML = '<div class="no-items">還沒有會議紀錄</div>'; }
+  else lEl.innerHTML = [...myLogs].reverse().map(l=>`
+    <div class="log-item">
+      <button class="log-del" onclick="removeLog('${l.id}')">×</button>
+      <div class="log-date">${l.date||''}</div>
+      <div class="log-note">${esc(l.note)}</div>
+    </div>`).join('');
+}
+
+// ── Task CRUD ──────────────────────────────────────────
+async function addTodo() {
+  const inp = document.getElementById('new-todo');
+  const text = inp.value.trim(); if(!text) return;
+  const t = { id:uid(), projectId:viewingId, text, done:false };
+  inp.value = '';
+  setSyncStatus('syncing','儲存中…');
+  const res = await apiPost('saveTask', t);
+  if (res && res.ok) { tasks.push(t); render(); renderDetail(); setSyncStatus('ok','已同步'); }
+  else setSyncStatus('error','儲存失敗');
+}
+
+async function toggleTask(id, checked) {
+  const t = tasks.find(x=>String(x.id)===String(id)); if(!t) return;
+  t.done = checked;
+  setSyncStatus('syncing','儲存中…');
+  const res = await apiPost('saveTask', t);
+  if (res && res.ok) { render(); renderDetail(); setSyncStatus('ok','已同步'); }
+  else setSyncStatus('error','儲存失敗');
+}
+
+async function removeTask(id) {
+  setSyncStatus('syncing','刪除中…');
+  const res = await apiPost('deleteTask', { id });
+  if (res && res.ok) { tasks = tasks.filter(t=>String(t.id)!==String(id)); render(); renderDetail(); setSyncStatus('ok','已同步'); }
+  else setSyncStatus('error','刪除失敗');
+}
+
+// ── Log CRUD ───────────────────────────────────────────
+async function addLog() {
+  const ta = document.getElementById('new-log');
+  const note = ta.value.trim(); if(!note) return;
+  const l = { id:uid(), projectId:viewingId, note, date:today() };
+  ta.value = '';
+  setSyncStatus('syncing','儲存中…');
+  const res = await apiPost('saveLog', l);
+  if (res && res.ok) { logs.push(l); renderDetail(); setSyncStatus('ok','已同步'); }
+  else setSyncStatus('error','儲存失敗');
+}
+
+async function removeLog(id) {
+  setSyncStatus('syncing','刪除中…');
+  const res = await apiPost('deleteLog', { id });
+  if (res && res.ok) { logs = logs.filter(l=>String(l.id)!==String(id)); renderDetail(); setSyncStatus('ok','已同步'); }
+  else setSyncStatus('error','刪除失敗');
+}
+</script>
+</body>
+</html>
